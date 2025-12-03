@@ -94,6 +94,18 @@ Matrix *matrix_softmax(Matrix *mat) {
   return mat;
 }
 
+Matrix *matrix_transpose(Matrix *mat) {
+  Matrix *transposed_matrix = matrix_create(mat->cols, mat->rows);
+  for (int i = 0; i < mat->rows; ++i) {
+    for (int j = 0; j < mat->cols; ++j) {
+      int src_index = i * mat->cols + j;
+      int dst_index = j * transposed_matrix->cols + i;
+      transposed_matrix->data[dst_index] = mat->data[src_index];
+    }
+  }
+  return transposed_matrix;
+}
+
 Matrix *matrix_flatten(Image *img) {
   Matrix *mat = matrix_create(1, 784);
 
@@ -111,6 +123,26 @@ Matrix *matrix_one_hot(int label, int size) {
   return mat;
 }
 
+int arg_max(Matrix *mat) {
+  int max_index = 0;
+  int mat_size = mat->rows * mat->cols;
+  for (int i = 0; i < mat_size; ++i) {
+    if (mat->data[i] > mat->data[max_index]) {
+      max_index = i;
+    }
+  }
+  return max_index;
+}
+
+void matrix_free(Matrix *m) {
+  if (m != NULL) {
+    if (m->data != NULL) {
+      free(m->data);
+    }
+    free(m);
+  }
+}
+
 void matrix_print(Matrix *mat) {
   int rows = mat->rows;
   int cols = mat->cols;
@@ -121,17 +153,6 @@ void matrix_print(Matrix *mat) {
     }
     printf("\n");
   }
-}
-
-int arg_max(Matrix *mat) {
-  int max_index = 0;
-  int mat_size = mat->rows * mat->cols;
-  for (int i = 0; i < mat_size; ++i) {
-    if (mat->data[i] > mat->data[max_index]) {
-      max_index = i;
-    }
-  }
-  return max_index;
 }
 
 void print_image_labels(Image *image, uint8_t label) {
@@ -248,7 +269,7 @@ int main() {
   Matrix *randomized_weights = matrix_randomize(weights);
 
   for (int epoch = 0; epoch < 100; ++epoch) {
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < num_train_images; ++i) {
       Matrix *input = matrix_flatten(&train_images[i]);
       Matrix *target_matrix = matrix_one_hot(train_labels[i], 10);
       Matrix *output = matrix_multiply(input, weights);
@@ -264,13 +285,13 @@ int main() {
           weights->data[i * 10 + j] -= 0.01 * gradient;
         }
       }
-      free(input);
-      free(target_matrix);
-      free(output);
+      matrix_free(input);
+      matrix_free(target_matrix);
+      matrix_free(output);
     }
 
     int correct = 0;
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < num_test_images; ++i) {
       Matrix *test_input = matrix_flatten(&test_images[i]);
       Matrix *target_matrix = matrix_one_hot(test_labels[i], 10);
       Matrix *test_output = matrix_multiply(test_input, weights);
@@ -279,9 +300,9 @@ int main() {
       if (max_prob_index == test_labels[i]) {
         correct++;
       }
-      free(test_input);
-      free(target_matrix);
-      free(test_output);
+      matrix_free(test_input);
+      matrix_free(target_matrix);
+      matrix_free(test_output);
     }
     printf("Epoch %d Accuracy: %.2f%%\n", epoch,
            (float)correct / num_test_images * 100);
