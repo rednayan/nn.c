@@ -1,3 +1,4 @@
+#include "weights.h"
 #include <inttypes.h>
 #include <math.h>
 #include <stdint.h>
@@ -144,6 +145,64 @@ void matrix_free(Matrix *m) {
   }
 }
 
+void matrix_save_bin(Matrix *mat, char *file_name) {
+  FILE *file = fopen(file_name, "wb");
+  if (file == NULL) {
+    perror("Error: file not found.");
+    return;
+  }
+
+  fwrite(&mat->rows, sizeof(int), 1, file);
+  fwrite(&mat->cols, sizeof(int), 1, file);
+
+  fwrite(mat->data, sizeof(float), mat->rows * mat->cols, file);
+  printf("Success: Saved matrix at: %s\n", file_name);
+  fclose(file);
+}
+
+Matrix *matrix_load_bin(char *file_name) {
+  FILE *file = fopen(file_name, "rb");
+  if (file == NULL) {
+    perror("Error: File not found.");
+    return NULL;
+  }
+  int rows, cols;
+  fread(&rows, sizeof(int), 1, file);
+  fread(&cols, sizeof(int), 1, file);
+
+  Matrix *mat = matrix_create(rows, cols);
+  fread(mat->data, sizeof(float), rows * cols, file);
+  printf("Success: Read matrix from %s\n", file_name);
+  fclose(file);
+  return mat;
+}
+
+void matrix_save_to_header(Matrix *mat, char *array_name, FILE *file) {
+  fprintf(file, "#define ROWS_%s %d\n#define COLS_%s %d\n\n", array_name,
+          mat->rows, array_name, mat->cols);
+
+  fprintf(file, "const float %s[] = {\n ", array_name);
+
+  for (int i = 0; i < mat->rows * mat->cols; ++i) {
+    fprintf(file, "%.7ff", mat->data[i]);
+    if (i < (mat->rows * mat->cols) - 1) {
+      fprintf(file, ",");
+    }
+    if ((i + 1) % 10 == 0) {
+      fprintf(file, "\n");
+    }
+  }
+  fprintf(file, "\n}; \n\n");
+}
+
+Matrix *matrix_create_from_header(const float *data, int rows, int cols) {
+  Matrix *m = matrix_create(rows, cols);
+  for (int i = 0; i < rows * cols; i++) {
+    m->data[i] = data[i];
+  }
+  return m;
+}
+
 void matrix_print(Matrix *mat) {
   int rows = mat->rows;
   int cols = mat->cols;
@@ -180,6 +239,32 @@ void print_image_matrix(Matrix *mat) {
       }
     }
     printf("\n");
+  }
+}
+
+void validate_model(int num_validation_images, Image *validation_images,
+                    uint8_t *validation_labels) {
+
+  Matrix *W1_bin = matrix_load_bin("W1.bin");
+  Matrix *W2_bin = matrix_load_bin("W2.bin");
+
+  for (int j = 0; j < ROWS_W1_HEADER * COLS_W1_HEADER; ++j) {
+    // TODO
+  }
+  for (int i = 0; i < num_validation_images; ++i) {
+    Matrix *input_validation = matrix_flatten(&validation_images[i]);
+    Matrix *input_val = matrix_multiply(input_validation, W1_bin);
+    Matrix *input_val_relu = matrix_relu(input_val);
+    Matrix *input_val_2 = matrix_multiply(input_val_relu, W2_bin);
+    Matrix *pred_out_val = matrix_softmax(input_val_2);
+
+    int prediction_output = arg_max(pred_out_val);
+    printf("prediction: %d\n", prediction_output);
+    print_image_labels(&validation_images[i], validation_labels[i]);
+
+    matrix_free(input_validation);
+    matrix_free(input_val_relu);
+    matrix_free(pred_out_val);
   }
 }
 
@@ -283,7 +368,7 @@ int main() {
   Matrix *W1 = matrix_randomize(matrix_create(784, 128));
   Matrix *W2 = matrix_randomize(matrix_create(128, 10));
 
-  for (int epoch = 0; epoch < 10; ++epoch) {
+  for (int epoch = 0; epoch < 5; ++epoch) {
     for (int i = 0; i < num_train_images; ++i) {
       Matrix *X = matrix_flatten(&train_images[i]);
       Matrix *X_raw = matrix_multiply(X, W1);
@@ -351,22 +436,17 @@ int main() {
            ((float)correct / num_test_images) * 100);
   }
 
-  for (int i = 0; i < num_validation_images; ++i) {
-    Matrix *input_validation = matrix_flatten(&validation_images[i]);
-    Matrix *input_val = matrix_multiply(input_validation, W1);
-    Matrix *input_val_relu = matrix_relu(input_val);
-    Matrix *input_val_2 = matrix_multiply(input_val_relu, W2);
-    Matrix *pred_out_val = matrix_softmax(input_val_2);
+  matrix_save_bin(W1, "W1.bin");
+  matrix_save_bin(W2, "W2.bin");
+  char *header_file_name = "weights.h";
+  FILE *header_file = fopen(header_file_name, "w");
+  matrix_save_to_header(W1, "W1_HEADER", header_file);
+  matrix_save_to_header(W2, "W2_HEADER", header_file);
+  printf("Success: Saved weights at header file: %s\n", header_file_name);
 
-    int prediction_output = arg_max(pred_out_val);
-    printf("prediction: %d\n", prediction_output);
-    print_image_labels(&validation_images[i], validation_labels[i]);
+  printf("Finished writing weights!");
 
-    matrix_free(input_validation);
-    matrix_free(input_val_relu);
-    matrix_free(pred_out_val);
-  }
-
+  fclose(header_file);
   free(train_images);
   free(train_labels);
   free(test_images);
