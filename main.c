@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <time.h>
 
 typedef struct {
   uint8_t pixels[28 * 28];
@@ -184,12 +185,13 @@ void print_image_matrix(Matrix *mat) {
 
 int main() {
 
-  /* ---------------DATA LOADING---------------- */
+  srand(time(0));
+
   char *folder = "/home/syien/Documents/dev/nn/MNIST_ORG/";
   uint32_t image_header_buffer[4], label_header_buffer[2],
       test_header_buffer[4], test_label_buffer[2];
-  uint32_t magic_image, num_train_images, num_test_images, rows, cols,
-      magic_labels, train_label_count, test_label_count;
+  int magic_image, num_train_images, num_test_images, rows, cols, magic_labels,
+      train_label_count, test_label_count;
 
   char input_images_file[256];
   sprintf(input_images_file, "%strain-images.idx3-ubyte", folder);
@@ -265,54 +267,83 @@ int main() {
   // print_image_labels(&train_images[0], train_labels[0]);
   // print_image_labels(&test_images[0], test_labels[0]);
 
-  Matrix *weights = matrix_create(784, 10);
-  Matrix *randomized_weights = matrix_randomize(weights);
+  Matrix *W1 = matrix_randomize(matrix_create(784, 128));
+  Matrix *W2 = matrix_randomize(matrix_create(128, 10));
 
   for (int epoch = 0; epoch < 100; ++epoch) {
     for (int i = 0; i < num_train_images; ++i) {
-      Matrix *input = matrix_flatten(&train_images[i]);
-      Matrix *target_matrix = matrix_one_hot(train_labels[i], 10);
-      Matrix *output = matrix_multiply(input, weights);
-      Matrix *predictions = matrix_softmax(output);
+      Matrix *X = matrix_flatten(&train_images[i]);
+      Matrix *X_raw = matrix_multiply(X, W1);
+      Matrix *X1 = matrix_relu(X_raw);
+      Matrix *X1W2 = matrix_multiply(X1, W2);
+      Matrix *output = matrix_softmax(X1W2);
 
       Matrix *error_matrix = matrix_create(1, 10);
-      for (int i = 0; i < 10; ++i) {
-        error_matrix->data[i] = predictions->data[i] - target_matrix->data[i];
+      Matrix *target_matrix = matrix_one_hot(train_labels[i], 10);
+      for (int j = 0; j < 10; j++) {
+        error_matrix->data[j] = output->data[j] - target_matrix->data[j];
       }
-      for (int i = 0; i < 784; ++i) {
-        for (int j = 0; j < 10; ++j) {
-          float gradient = input->data[i] * error_matrix->data[j];
-          weights->data[i * 10 + j] -= 0.01 * gradient;
+      Matrix *transpose_X1 = matrix_transpose(X1);
+      Matrix *grad2 = matrix_multiply(transpose_X1, error_matrix);
+      Matrix *transpose_W2 = matrix_transpose(W2);
+      Matrix *error_matrix_2 = matrix_multiply(error_matrix, transpose_W2);
+
+      for (int k = 0; k < 128; ++k) {
+        if (X1->data[k] == 0) {
+          error_matrix_2->data[k] = 0;
         }
       }
-      matrix_free(input);
+
+      Matrix *transpose_X = matrix_transpose(X);
+      Matrix *grad1 = matrix_multiply(transpose_X, error_matrix_2);
+
+      for (int l = 0; l < W2->cols * W2->rows; ++l) {
+        W2->data[l] -= 0.01 * grad2->data[l];
+      }
+
+      for (int m = 0; m < W1->cols * W1->rows; ++m) {
+        W1->data[m] -= 0.01 * grad1->data[m];
+      }
+
+      matrix_free(transpose_X1);
+      matrix_free(transpose_X);
+      matrix_free(transpose_W2);
+      matrix_free(X);
+      matrix_free(X_raw);
+      matrix_free(X1W2);
+      matrix_free(error_matrix);
+      matrix_free(error_matrix_2);
       matrix_free(target_matrix);
-      matrix_free(output);
+      matrix_free(grad1);
+      matrix_free(grad2);
     }
 
     int correct = 0;
-    for (int i = 0; i < num_test_images; ++i) {
-      Matrix *test_input = matrix_flatten(&test_images[i]);
-      Matrix *target_matrix = matrix_one_hot(test_labels[i], 10);
-      Matrix *test_output = matrix_multiply(test_input, weights);
-      Matrix *predictions = matrix_softmax(test_output);
-      int max_prob_index = arg_max(predictions);
-      if (max_prob_index == test_labels[i]) {
+    for (int n = 0; n < num_test_images; ++n) {
+      Matrix *input_test = matrix_flatten(&test_images[n]);
+      Matrix *input_x = matrix_multiply(input_test, W1);
+      Matrix *input_x_relu = matrix_relu(input_x);
+      Matrix *input_x1 = matrix_multiply(input_x_relu, W2);
+      Matrix *pred_output = matrix_softmax(input_x1);
+
+      int pred_label = arg_max(pred_output);
+      if (pred_label == test_labels[n]) {
         correct++;
       }
-      matrix_free(test_input);
-      matrix_free(target_matrix);
-      matrix_free(test_output);
+      matrix_free(input_test);
+      matrix_free(input_x_relu);
+      matrix_free(pred_output);
     }
     printf("Epoch %d Accuracy: %.2f%%\n", epoch,
-           (float)correct / num_test_images * 100);
+           ((float)correct / num_test_images) * 100);
   }
 
   free(train_images);
   free(train_labels);
   free(test_images);
   free(test_labels);
-  free(weights);
+  matrix_free(W1);
+  matrix_free(W2);
   fclose(fp_train_images);
   fclose(fp_train_labels);
   return 0;
