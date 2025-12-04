@@ -361,6 +361,10 @@ int main() {
     int prediction_output = arg_max(pred_out_val);
     printf("prediction: %d\n", prediction_output);
     print_image_labels(&validation_images[i], validation_labels[i]);
+
+    matrix_free(input_validation);
+    matrix_free(input_val_relu);
+    matrix_free(pred_out_val);
   }
 
   free(train_images);
