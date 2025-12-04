@@ -190,8 +190,8 @@ int main() {
   char *folder = "/home/syien/Documents/dev/nn/MNIST_ORG/";
   uint32_t image_header_buffer[4], label_header_buffer[2],
       test_header_buffer[4], test_label_buffer[2];
-  int magic_image, num_train_images, num_test_images, rows, cols, magic_labels,
-      train_label_count, test_label_count;
+  int magic_image, num_train_images, num_total_test_images, rows, cols,
+      magic_labels, train_label_count, test_total_label_count;
 
   char input_images_file[256];
   sprintf(input_images_file, "%strain-images.idx3-ubyte", folder);
@@ -233,8 +233,11 @@ int main() {
   num_train_images = image_header_buffer[1];
   num_train_images = fbytes(num_train_images);
 
-  num_test_images = test_header_buffer[1];
-  num_test_images = fbytes(num_test_images);
+  num_total_test_images = test_header_buffer[1];
+  num_total_test_images = fbytes(num_total_test_images);
+  int num_test_images = (int)(0.999f * num_total_test_images);
+
+  int num_validation_images = (int)(0.001f * num_total_test_images);
 
   rows = image_header_buffer[2];
   rows = fbytes(rows);
@@ -248,8 +251,11 @@ int main() {
   train_label_count = label_header_buffer[1];
   train_label_count = fbytes(train_label_count);
 
-  test_label_count = test_label_buffer[1];
-  test_label_count = fbytes(test_label_count);
+  test_total_label_count = test_label_buffer[1];
+  test_total_label_count = fbytes(test_total_label_count);
+  int test_label_count = (int)(0.999f * test_total_label_count);
+
+  int validation_label_count = (int)(0.001f * test_total_label_count);
 
   Image *train_images = (Image *)malloc(sizeof(Image) * num_train_images);
   uint8_t *train_labels =
@@ -258,19 +264,26 @@ int main() {
   Image *test_images = (Image *)malloc(sizeof(Image) * num_test_images);
   uint8_t *test_labels = (uint8_t *)malloc(sizeof(uint8_t) * test_label_count);
 
+  Image *validation_images =
+      (Image *)malloc(sizeof(Image) * num_validation_images);
+  uint8_t *validation_labels =
+      (uint8_t *)malloc(sizeof(uint8_t) * test_label_count);
+
   fread(train_images, sizeof(Image), num_train_images, fp_train_images);
   fread(train_labels, sizeof(uint8_t), train_label_count, fp_train_labels);
 
   fread(test_images, sizeof(Image), num_test_images, fp_test_images);
   fread(test_labels, sizeof(uint8_t), test_label_count, fp_test_labels);
 
-  // print_image_labels(&train_images[0], train_labels[0]);
-  // print_image_labels(&test_images[0], test_labels[0]);
+  fread(validation_images, sizeof(Image), num_validation_images,
+        fp_test_images);
+  fread(validation_labels, sizeof(uint8_t), validation_label_count,
+        fp_test_labels);
 
   Matrix *W1 = matrix_randomize(matrix_create(784, 128));
   Matrix *W2 = matrix_randomize(matrix_create(128, 10));
 
-  for (int epoch = 0; epoch < 100; ++epoch) {
+  for (int epoch = 0; epoch < 10; ++epoch) {
     for (int i = 0; i < num_train_images; ++i) {
       Matrix *X = matrix_flatten(&train_images[i]);
       Matrix *X_raw = matrix_multiply(X, W1);
@@ -336,6 +349,18 @@ int main() {
     }
     printf("Epoch %d Accuracy: %.2f%%\n", epoch,
            ((float)correct / num_test_images) * 100);
+  }
+
+  for (int i = 0; i < num_validation_images; ++i) {
+    Matrix *input_validation = matrix_flatten(&validation_images[i]);
+    Matrix *input_val = matrix_multiply(input_validation, W1);
+    Matrix *input_val_relu = matrix_relu(input_val);
+    Matrix *input_val_2 = matrix_multiply(input_val_relu, W2);
+    Matrix *pred_out_val = matrix_softmax(input_val_2);
+
+    int prediction_output = arg_max(pred_out_val);
+    printf("prediction: %d\n", prediction_output);
+    print_image_labels(&validation_images[i], validation_labels[i]);
   }
 
   free(train_images);
