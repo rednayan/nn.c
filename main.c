@@ -1,261 +1,36 @@
+#include "nn.h"
 #include "weights.h"
 #include <inttypes.h>
-#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
 
-typedef struct {
-  uint8_t pixels[28 * 28];
-} Image;
-
-typedef struct {
-  int rows;
-  int cols;
-  float *data;
-} Matrix;
-
-uint32_t fbytes(uint32_t val) {
-  return ((val >> 24) & 0x000000FF) | ((val >> 8) & 0x0000FF00) |
-         ((val << 8) & 0x00FF0000) | ((val << 24) & 0xFF000000);
-}
-
-Matrix *matrix_create(int rows, int cols) {
-  Matrix *mat = (Matrix *)malloc(sizeof(Matrix));
-  mat->rows = rows;
-  mat->cols = cols;
-  mat->data = (float *)calloc(rows * cols, sizeof(float));
-  return mat;
-}
-
-Matrix *matrix_multiply(Matrix *x, Matrix *y) {
-  if (x->cols != y->rows) {
-    perror("Matrices cannot be multiplied, dimension error");
-    return NULL;
-  }
-  Matrix *mat = matrix_create(x->rows, y->cols);
-
-  for (int i = 0; i < mat->rows; ++i) {
-    for (int j = 0; j < mat->cols; ++j) {
-      float sum = 0;
-      for (int k = 0; k < x->cols; ++k) {
-        float a = x->data[i * x->cols + k];
-        float b = y->data[k * y->cols + j];
-        sum += a * b;
-      }
-      mat->data[i * mat->cols + j] = sum;
-    }
-  }
-
-  return mat;
-}
-
-Matrix *matrix_randomize(Matrix *mat) {
-  for (int i = 0; i < mat->rows; ++i) {
-    for (int j = 0; j < mat->cols; ++j) {
-      mat->data[i * mat->cols + j] = ((float)rand() / RAND_MAX) - 0.5;
-    }
-  }
-  return mat;
-}
-
-Matrix *matrix_relu(Matrix *mat) {
-  for (int i = 0; i < mat->rows; ++i) {
-    for (int j = 0; j < mat->cols; ++j) {
-      if (mat->data[i * mat->cols + j] < 0) {
-        mat->data[i * mat->cols + j] = 0;
-      }
-    }
-  }
-  return mat;
-}
-
-Matrix *matrix_softmax(Matrix *mat) {
-  int num_of_elements = mat->rows * mat->cols;
-  float sum = 0.0f;
-  float max_value = -INFINITY;
-  float epsilon = 1e-7f;
-
-  for (int i = 0; i < num_of_elements; i++) {
-    if (mat->data[i] > max_value) {
-      max_value = mat->data[i];
-    }
-  }
-
-  for (int i = 0; i < num_of_elements; ++i) {
-    float exp = expf(mat->data[i] - max_value);
-    mat->data[i] = exp;
-    sum += exp;
-  }
-  for (int i = 0; i < num_of_elements; ++i) {
-    mat->data[i] /= (sum + epsilon);
-  }
-
-  return mat;
-}
-
-Matrix *matrix_transpose(Matrix *mat) {
-  Matrix *transposed_matrix = matrix_create(mat->cols, mat->rows);
-  for (int i = 0; i < mat->rows; ++i) {
-    for (int j = 0; j < mat->cols; ++j) {
-      int src_index = i * mat->cols + j;
-      int dst_index = j * transposed_matrix->cols + i;
-      transposed_matrix->data[dst_index] = mat->data[src_index];
-    }
-  }
-  return transposed_matrix;
-}
-
-Matrix *matrix_flatten(Image *img) {
-  Matrix *mat = matrix_create(1, 784);
-
-  for (int i = 0; i < 28; ++i) {
-    for (int j = 0; j < 28; ++j) {
-      mat->data[i * 28 + j] = img->pixels[i * 28 + j] / 255.0;
-    }
-  }
-  return mat;
-}
-
-Matrix *matrix_one_hot(int label, int size) {
-  Matrix *mat = matrix_create(1, size);
-  mat->data[label] = 1.0f;
-  return mat;
-}
-
-int arg_max(Matrix *mat) {
-  int max_index = 0;
-  int mat_size = mat->rows * mat->cols;
-  for (int i = 0; i < mat_size; ++i) {
-    if (mat->data[i] > mat->data[max_index]) {
-      max_index = i;
-    }
-  }
-  return max_index;
-}
-
-void matrix_free(Matrix *m) {
-  if (m != NULL) {
-    if (m->data != NULL) {
-      free(m->data);
-    }
-    free(m);
-  }
-}
-
-void matrix_save_bin(Matrix *mat, char *file_name) {
-  FILE *file = fopen(file_name, "wb");
-  if (file == NULL) {
-    perror("Error: file not found.");
-    return;
-  }
-
-  fwrite(&mat->rows, sizeof(int), 1, file);
-  fwrite(&mat->cols, sizeof(int), 1, file);
-
-  fwrite(mat->data, sizeof(float), mat->rows * mat->cols, file);
-  printf("Success: Saved matrix at: %s\n", file_name);
-  fclose(file);
-}
-
-Matrix *matrix_load_bin(char *file_name) {
-  FILE *file = fopen(file_name, "rb");
-  if (file == NULL) {
-    perror("Error: File not found.");
-    return NULL;
-  }
-  int rows, cols;
-  fread(&rows, sizeof(int), 1, file);
-  fread(&cols, sizeof(int), 1, file);
-
-  Matrix *mat = matrix_create(rows, cols);
-  fread(mat->data, sizeof(float), rows * cols, file);
-  printf("Success: Read matrix from %s\n", file_name);
-  fclose(file);
-  return mat;
-}
-
-void matrix_save_to_header(Matrix *mat, char *array_name, FILE *file) {
-  fprintf(file, "#define ROWS_%s %d\n#define COLS_%s %d\n\n", array_name,
-          mat->rows, array_name, mat->cols);
-
-  fprintf(file, "const float %s[] = {\n ", array_name);
-
-  for (int i = 0; i < mat->rows * mat->cols; ++i) {
-    fprintf(file, "%.7ff", mat->data[i]);
-    if (i < (mat->rows * mat->cols) - 1) {
-      fprintf(file, ",");
-    }
-    if ((i + 1) % 10 == 0) {
-      fprintf(file, "\n");
-    }
-  }
-  fprintf(file, "\n}; \n\n");
-}
-
-Matrix *matrix_create_from_header(const float *data, int rows, int cols) {
-  Matrix *m = matrix_create(rows, cols);
-  for (int i = 0; i < rows * cols; i++) {
-    m->data[i] = data[i];
-  }
-  return m;
-}
-
-void matrix_print(Matrix *mat) {
-  int rows = mat->rows;
-  int cols = mat->cols;
-
-  for (int i = 0; i < rows; ++i) {
-    for (int j = 0; j < cols; ++j) {
-      printf(" %f", mat->data[i * cols + j]);
-    }
-    printf("\n");
-  }
-}
-
-void print_image_labels(Image *image, uint8_t label) {
-  printf("Label: %d\n", label);
-  for (int i = 0; i < 28; ++i) {
-    for (int j = 0; j < 28; ++j) {
-      if (image->pixels[i * 28 + j] > 10) {
-        printf("#");
-      } else {
-        printf(".");
-      }
-    }
-    printf("\n");
-  }
-}
-
-void print_image_matrix(Matrix *mat) {
-  for (int i = 0; i < 28; ++i) {
-    for (int j = 0; j < 28; ++j) {
-      if (mat->data[i * 28 + j] > 0) {
-        printf("#");
-      } else {
-        printf(".");
-      }
-    }
-    printf("\n");
-  }
-}
+#define EPOCH 5
 
 void validate_model(int num_validation_images, Image *validation_images,
                     uint8_t *validation_labels) {
 
-  Matrix *W1_bin = matrix_load_bin("W1.bin");
-  Matrix *W2_bin = matrix_load_bin("W2.bin");
+  // Matrix *W1_bin = matrix_load_bin("W1.bin");
+  // Matrix *W2_bin = matrix_load_bin("W2.bin");
+
+  Matrix *W1_head = matrix_create(ROWS_W1_HEADER, COLS_W1_HEADER);
+  Matrix *W2_head = matrix_create(ROWS_W2_HEADER, COLS_W2_HEADER);
 
   for (int j = 0; j < ROWS_W1_HEADER * COLS_W1_HEADER; ++j) {
-    // TODO
+    W1_head->data[j] = W1_HEADER[j];
   }
+
+  for (int m = 0; m < ROWS_W2_HEADER * COLS_W2_HEADER; ++m) {
+    W2_head->data[m] = W2_HEADER[m];
+  }
+
   for (int i = 0; i < num_validation_images; ++i) {
     Matrix *input_validation = matrix_flatten(&validation_images[i]);
-    Matrix *input_val = matrix_multiply(input_validation, W1_bin);
+    Matrix *input_val = matrix_multiply(input_validation, W1_head);
     Matrix *input_val_relu = matrix_relu(input_val);
-    Matrix *input_val_2 = matrix_multiply(input_val_relu, W2_bin);
+    Matrix *input_val_2 = matrix_multiply(input_val_relu, W2_head);
     Matrix *pred_out_val = matrix_softmax(input_val_2);
 
     int prediction_output = arg_max(pred_out_val);
@@ -266,6 +41,78 @@ void validate_model(int num_validation_images, Image *validation_images,
     matrix_free(input_val_relu);
     matrix_free(pred_out_val);
   }
+}
+void train(Matrix *W1, Matrix *W2, int num_train_images, Image *train_images,
+           uint8_t *train_labels, int epoch) {
+
+  for (int i = 0; i < num_train_images; ++i) {
+    Matrix *X = matrix_flatten(&train_images[i]);
+    Matrix *X_raw = matrix_multiply(X, W1);
+    Matrix *X1 = matrix_relu(X_raw);
+    Matrix *X1W2 = matrix_multiply(X1, W2);
+    Matrix *output = matrix_softmax(X1W2);
+
+    Matrix *error_matrix = matrix_create(1, 10);
+    Matrix *target_matrix = matrix_one_hot(train_labels[i], 10);
+    for (int j = 0; j < 10; j++) {
+      error_matrix->data[j] = output->data[j] - target_matrix->data[j];
+    }
+    Matrix *transpose_X1 = matrix_transpose(X1);
+    Matrix *grad2 = matrix_multiply(transpose_X1, error_matrix);
+    Matrix *transpose_W2 = matrix_transpose(W2);
+    Matrix *error_matrix_2 = matrix_multiply(error_matrix, transpose_W2);
+
+    for (int k = 0; k < 128; ++k) {
+      if (X1->data[k] == 0) {
+        error_matrix_2->data[k] = 0;
+      }
+    }
+
+    Matrix *transpose_X = matrix_transpose(X);
+    Matrix *grad1 = matrix_multiply(transpose_X, error_matrix_2);
+
+    for (int l = 0; l < W2->cols * W2->rows; ++l) {
+      W2->data[l] -= 0.01 * grad2->data[l];
+    }
+
+    for (int m = 0; m < W1->cols * W1->rows; ++m) {
+      W1->data[m] -= 0.01 * grad1->data[m];
+    }
+
+    matrix_free(transpose_X1);
+    matrix_free(transpose_X);
+    matrix_free(transpose_W2);
+    matrix_free(X);
+    matrix_free(X_raw);
+    matrix_free(X1W2);
+    matrix_free(error_matrix);
+    matrix_free(error_matrix_2);
+    matrix_free(target_matrix);
+    matrix_free(grad1);
+    matrix_free(grad2);
+  }
+}
+
+void test(Matrix *W1, Matrix *W2, int num_test_images, Image *test_images,
+          uint8_t *test_labels, int epoch) {
+  int correct = 0;
+  for (int n = 0; n < num_test_images; ++n) {
+    Matrix *input_test = matrix_flatten(&test_images[n]);
+    Matrix *input_x = matrix_multiply(input_test, W1);
+    Matrix *input_x_relu = matrix_relu(input_x);
+    Matrix *input_x1 = matrix_multiply(input_x_relu, W2);
+    Matrix *pred_output = matrix_softmax(input_x1);
+
+    int pred_label = arg_max(pred_output);
+    if (pred_label == test_labels[n]) {
+      correct++;
+    }
+    matrix_free(input_test);
+    matrix_free(input_x_relu);
+    matrix_free(pred_output);
+  }
+  printf("Epoch %d Accuracy: %.2f%%\n", epoch,
+         ((float)correct / num_test_images) * 100);
 }
 
 int main() {
@@ -368,73 +215,11 @@ int main() {
   Matrix *W1 = matrix_randomize(matrix_create(784, 128));
   Matrix *W2 = matrix_randomize(matrix_create(128, 10));
 
-  for (int epoch = 0; epoch < 5; ++epoch) {
-    for (int i = 0; i < num_train_images; ++i) {
-      Matrix *X = matrix_flatten(&train_images[i]);
-      Matrix *X_raw = matrix_multiply(X, W1);
-      Matrix *X1 = matrix_relu(X_raw);
-      Matrix *X1W2 = matrix_multiply(X1, W2);
-      Matrix *output = matrix_softmax(X1W2);
-
-      Matrix *error_matrix = matrix_create(1, 10);
-      Matrix *target_matrix = matrix_one_hot(train_labels[i], 10);
-      for (int j = 0; j < 10; j++) {
-        error_matrix->data[j] = output->data[j] - target_matrix->data[j];
-      }
-      Matrix *transpose_X1 = matrix_transpose(X1);
-      Matrix *grad2 = matrix_multiply(transpose_X1, error_matrix);
-      Matrix *transpose_W2 = matrix_transpose(W2);
-      Matrix *error_matrix_2 = matrix_multiply(error_matrix, transpose_W2);
-
-      for (int k = 0; k < 128; ++k) {
-        if (X1->data[k] == 0) {
-          error_matrix_2->data[k] = 0;
-        }
-      }
-
-      Matrix *transpose_X = matrix_transpose(X);
-      Matrix *grad1 = matrix_multiply(transpose_X, error_matrix_2);
-
-      for (int l = 0; l < W2->cols * W2->rows; ++l) {
-        W2->data[l] -= 0.01 * grad2->data[l];
-      }
-
-      for (int m = 0; m < W1->cols * W1->rows; ++m) {
-        W1->data[m] -= 0.01 * grad1->data[m];
-      }
-
-      matrix_free(transpose_X1);
-      matrix_free(transpose_X);
-      matrix_free(transpose_W2);
-      matrix_free(X);
-      matrix_free(X_raw);
-      matrix_free(X1W2);
-      matrix_free(error_matrix);
-      matrix_free(error_matrix_2);
-      matrix_free(target_matrix);
-      matrix_free(grad1);
-      matrix_free(grad2);
-    }
-
-    int correct = 0;
-    for (int n = 0; n < num_test_images; ++n) {
-      Matrix *input_test = matrix_flatten(&test_images[n]);
-      Matrix *input_x = matrix_multiply(input_test, W1);
-      Matrix *input_x_relu = matrix_relu(input_x);
-      Matrix *input_x1 = matrix_multiply(input_x_relu, W2);
-      Matrix *pred_output = matrix_softmax(input_x1);
-
-      int pred_label = arg_max(pred_output);
-      if (pred_label == test_labels[n]) {
-        correct++;
-      }
-      matrix_free(input_test);
-      matrix_free(input_x_relu);
-      matrix_free(pred_output);
-    }
-    printf("Epoch %d Accuracy: %.2f%%\n", epoch,
-           ((float)correct / num_test_images) * 100);
+  for (int i = 0; i < EPOCH; ++i) {
+    train(W1, W2, num_train_images, train_images, train_labels, i);
+    test(W1, W2, num_test_images, test_images, test_labels, i);
   }
+  validate_model(num_validation_images, validation_images, validation_labels);
 
   matrix_save_bin(W1, "W1.bin");
   matrix_save_bin(W2, "W2.bin");
@@ -447,12 +232,12 @@ int main() {
   printf("Finished writing weights!");
 
   fclose(header_file);
+  matrix_free(W1);
+  matrix_free(W2);
   free(train_images);
   free(train_labels);
   free(test_images);
   free(test_labels);
-  matrix_free(W1);
-  matrix_free(W2);
   fclose(fp_train_images);
   fclose(fp_train_labels);
   return 0;
