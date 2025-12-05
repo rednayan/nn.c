@@ -1,7 +1,6 @@
 #include "nn.h"
 #include "weights.h"
 #include <inttypes.h>
-#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,11 +10,7 @@
 #define EPOCH 1
 
 void float_to_uint8_matrix(Matrix *float_weights, Matrix_uint8 *uint_weights) {
-  for (int i = 0; i < (float_weights->rows * float_weights->cols); ++i) {
-    float f = fmaxf(0.0f, fminf(float_weights->data[i], 1.0f));
-    f *= 255.0f;
-    uint_weights->data[i] = (uint8_t)(f + 0.5f);
-  }
+  // TODO
 }
 
 void validate_model(int num_validation_images, Image *validation_images,
@@ -221,9 +216,13 @@ int main() {
   fread(validation_labels, sizeof(uint8_t), validation_label_count,
         fp_test_labels);
 
+  Tensor *t = tensor_create(1, 1, 28, 28);
+  Tensor *filter_t = tensor_create(8, 1, 3, 3);
+  // 1D index from 4D corordinates Formula: n*(C*H*W) + c*(H*W) + h*W + w
+
+  /*
   Matrix *W1 = matrix_randomize(matrix_create(784, 128));
   Matrix *W2 = matrix_randomize(matrix_create(128, 10));
-
   for (int i = 0; i < EPOCH; ++i) {
     train(W1, W2, num_train_images, train_images, train_labels, i);
     test(W1, W2, num_test_images, test_images, test_labels, i);
@@ -254,11 +253,13 @@ int main() {
   fclose(header_uint8_file);
   printf("Success: Saved uint8 weights at header file: %s\n",
          header_uint8_file_name);
+  */
 
-  matrix_free(W1);
-  matrix_free(W2);
-  matrix_free_uint8(W1_uint8);
-  matrix_free_uint8(W2_uint8);
+  // matrix_free(W1);
+  // matrix_free(W2);
+  // matrix_free_uint8(W1_uint8);
+  // matrix_free_uint8(W2_uint8);
+
   free(train_images);
   free(train_labels);
   free(test_images);

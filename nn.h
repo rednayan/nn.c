@@ -21,6 +21,19 @@ typedef struct {
   uint8_t *data;
 } Matrix_uint8;
 
+typedef struct {
+  int n;
+  int channels;
+  int height;
+  int width;
+  float *data;
+} Tensor;
+
+Tensor *tensor_create(int n, int channels, int height, int width);
+Tensor *tensor_conv2d(Tensor *t, Tensor *filter_t, int padding, int stride);
+Tensor *tensor_randomize(Tensor *t);
+void tensor_free(Tensor *t);
+
 Matrix *matrix_create(int rows, int cols);
 Matrix_uint8 *matrix_create_uint8(int rows, int cols);
 Matrix *matrix_multiply(Matrix *x, Matrix *y);

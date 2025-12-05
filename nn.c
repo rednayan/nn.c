@@ -2,6 +2,49 @@
 #include <stdint.h>
 #include <string.h>
 
+Tensor *tensor_create(int n, int channels, int height, int width) {
+  Tensor *t = (Tensor *)malloc(sizeof(Tensor));
+  t->n = n;
+  t->channels = channels;
+  t->height = height;
+  t->width = width;
+  t->data = (float *)calloc(n * height * width, sizeof(float));
+  return t;
+}
+
+Tensor *tensor_randomize(Tensor *t) {
+  for (int i = 0; i < t->n * t->channels * t->height * t->channels; ++i) {
+    t->data[i] = ((float)rand() / RAND_MAX) - 0.5f;
+  }
+  return t;
+}
+
+Tensor *tensor_conv2d(Tensor *input_t, Tensor *filter_t, int padding,
+                      int stride) {
+  if (input_t->channels != filter_t->channels) {
+    printf("Error: Input depth %d != Filter depth %d", input_t->channels,
+           filter_t->channels);
+  }
+
+  int size_input_t =
+      input_t->n * input_t->channels * input_t->height * input_t->width;
+  int size_filter_t =
+      filter_t->n * filter_t->channels * filter_t->height * filter_t->width;
+
+  // output_size = ((input - kernel) + 2 * padding) / stride + 1
+  int output_height =
+      ((input_t->height - filter_t->height) + 2 * padding) / stride + 1;
+  int output_width =
+      ((input_t->width - filter_t->width) + 2 * padding) / stride + 1;
+
+  Tensor *output_t =
+      tensor_create(input_t->n, filter_t->n, output_height, output_width);
+
+  // TODO
+
+  return output_t;
+}
+
 Matrix *matrix_create(int rows, int cols) {
   Matrix *mat = (Matrix *)malloc(sizeof(Matrix));
   mat->rows = rows;
@@ -87,6 +130,15 @@ void matrix_free_uint8(Matrix_uint8 *m) {
       free(m->data);
     }
     free(m);
+  }
+}
+
+void tensor_free(Tensor *t) {
+  if (t != NULL) {
+    if (t->data != NULL) {
+      free(t->data);
+    }
+    free(t);
   }
 }
 
