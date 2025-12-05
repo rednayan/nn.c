@@ -15,12 +15,20 @@ typedef struct {
   float *data;
 } Matrix;
 
+typedef struct {
+  int rows;
+  int cols;
+  uint8_t *data;
+} Matrix_uint8;
+
 Matrix *matrix_create(int rows, int cols);
+Matrix_uint8 *matrix_create_uint8(int rows, int cols);
 Matrix *matrix_multiply(Matrix *x, Matrix *y);
 Matrix *matrix_randomize(Matrix *mat);
 Matrix *matrix_transpose(Matrix *mat);
 Matrix *matrix_flatten(Image *img);
 void matrix_free(Matrix *m);
+void matrix_free_uint8(Matrix_uint8 *m);
 void matrix_print(Matrix *mat);
 
 Matrix *matrix_relu(Matrix *mat);
@@ -32,6 +40,8 @@ uint32_t fbytes(uint32_t val);
 void matrix_save_bin(Matrix *mat, char *file_name);
 Matrix *matrix_load_bin(char *file_name);
 void matrix_save_to_header(Matrix *mat, char *array_name, FILE *file);
+void matrix_save_to_header_uint8(Matrix_uint8 *mat, char *array_name,
+                                 FILE *file);
 Matrix *matrix_create_from_header(const float *data, int rows, int cols);
 
 void print_image_labels(Image *image, uint8_t label);

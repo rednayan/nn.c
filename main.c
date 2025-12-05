@@ -1,13 +1,22 @@
 #include "nn.h"
 #include "weights.h"
 #include <inttypes.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
 
-#define EPOCH 5
+#define EPOCH 1
+
+void float_to_uint8_matrix(Matrix *float_weights, Matrix_uint8 *uint_weights) {
+  for (int i = 0; i < (float_weights->rows * float_weights->cols); ++i) {
+    float f = fmaxf(0.0f, fminf(float_weights->data[i], 1.0f));
+    f *= 255.0f;
+    uint_weights->data[i] = (uint8_t)(f + 0.5f);
+  }
+}
 
 void validate_model(int num_validation_images, Image *validation_images,
                     uint8_t *validation_labels) {
@@ -219,21 +228,37 @@ int main() {
     train(W1, W2, num_train_images, train_images, train_labels, i);
     test(W1, W2, num_test_images, test_images, test_labels, i);
   }
-  validate_model(num_validation_images, validation_images, validation_labels);
+  //  validate_model(num_validation_images, validation_images,
+  //  validation_labels);
 
   matrix_save_bin(W1, "W1.bin");
   matrix_save_bin(W2, "W2.bin");
+  printf("Success: Saved float weights bin files\n");
+
   char *header_file_name = "weights.h";
   FILE *header_file = fopen(header_file_name, "w");
   matrix_save_to_header(W1, "W1_HEADER", header_file);
   matrix_save_to_header(W2, "W2_HEADER", header_file);
-  printf("Success: Saved weights at header file: %s\n", header_file_name);
-
-  printf("Finished writing weights!");
-
   fclose(header_file);
+  printf("Success: Saved float weights at header file: %s\n", header_file_name);
+
+  char *header_uint8_file_name = "weights_uint8.h";
+  FILE *header_uint8_file = fopen(header_uint8_file_name, "w");
+  Matrix_uint8 *W1_uint8 = matrix_create_uint8(W1->rows, W1->cols);
+  Matrix_uint8 *W2_uint8 = matrix_create_uint8(W2->rows, W2->cols);
+  float_to_uint8_matrix(W1, W1_uint8);
+  float_to_uint8_matrix(W2, W2_uint8);
+  fprintf(header_uint8_file, "#include <stdint.h>\n");
+  matrix_save_to_header_uint8(W1_uint8, "W1_HEADER", header_uint8_file);
+  matrix_save_to_header_uint8(W2_uint8, "W2_HEADER", header_uint8_file);
+  fclose(header_uint8_file);
+  printf("Success: Saved uint8 weights at header file: %s\n",
+         header_uint8_file_name);
+
   matrix_free(W1);
   matrix_free(W2);
+  matrix_free_uint8(W1_uint8);
+  matrix_free_uint8(W2_uint8);
   free(train_images);
   free(train_labels);
   free(test_images);

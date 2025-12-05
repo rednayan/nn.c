@@ -1,10 +1,20 @@
 #include "nn.h"
+#include <stdint.h>
+#include <string.h>
 
 Matrix *matrix_create(int rows, int cols) {
   Matrix *mat = (Matrix *)malloc(sizeof(Matrix));
   mat->rows = rows;
   mat->cols = cols;
   mat->data = (float *)calloc(rows * cols, sizeof(float));
+  return mat;
+}
+
+Matrix_uint8 *matrix_create_uint8(int rows, int cols) {
+  Matrix_uint8 *mat = (Matrix_uint8 *)malloc(sizeof(Matrix_uint8));
+  mat->rows = rows;
+  mat->cols = cols;
+  mat->data = (uint8_t *)calloc(rows * cols, sizeof(uint8_t));
   return mat;
 }
 
@@ -63,6 +73,15 @@ Matrix *matrix_flatten(Image *img) {
 }
 
 void matrix_free(Matrix *m) {
+  if (m != NULL) {
+    if (m->data != NULL) {
+      free(m->data);
+    }
+    free(m);
+  }
+}
+
+void matrix_free_uint8(Matrix_uint8 *m) {
   if (m != NULL) {
     if (m->data != NULL) {
       free(m->data);
@@ -180,6 +199,25 @@ void matrix_save_to_header(Matrix *mat, char *array_name, FILE *file) {
 
   for (int i = 0; i < mat->rows * mat->cols; ++i) {
     fprintf(file, "%.7ff", mat->data[i]);
+    if (i < (mat->rows * mat->cols) - 1) {
+      fprintf(file, ",");
+    }
+    if ((i + 1) % 10 == 0) {
+      fprintf(file, "\n");
+    }
+  }
+  fprintf(file, "}; \n\n");
+}
+
+void matrix_save_to_header_uint8(Matrix_uint8 *mat, char *array_name,
+                                 FILE *file) {
+  fprintf(file, "#define ROWS_%s %d\n#define COLS_%s %d\n\n", array_name,
+          mat->rows, array_name, mat->cols);
+
+  fprintf(file, "const uint8_t %s[] = {\n ", array_name);
+
+  for (int i = 0; i < mat->rows * mat->cols; ++i) {
+    fprintf(file, "%d", mat->data[i]);
     if (i < (mat->rows * mat->cols) - 1) {
       fprintf(file, ",");
     }
