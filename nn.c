@@ -12,7 +12,7 @@ Tensor *tensor_create(int n, int channels, int height, int width)
 	t->channels = channels;
 	t->height = height;
 	t->width = width;
-	t->data = (float *)calloc(n * height * width, sizeof(float));
+	t->data = (float *)calloc(n * channels * height * width, sizeof(float));
 	return t;
 }
 
@@ -25,11 +25,11 @@ Tensor *tensor_randomize(Tensor *t)
 }
 
 // 1D index from 4D corordinates Formula: n*(C*H*W) + c*(H*W) + h*W + w
-long long get_flat_index(int n, int c, int h, int w, int channels, int height,
-			 int width)
+int get_flat_index(int n, int c, int h, int w, int channels, int height,
+		   int width)
 {
-	return (long long)n * (channels * height * width) +
-	       (long long)c * (height * width) + (long long)h * (width) + w;
+	return n * (channels * height * width) + c * (height * width) +
+	       h * (width) + w;
 }
 
 Tensor *tensor_conv2d(Tensor *input_t, Tensor *filter_t, int padding,
@@ -51,11 +51,11 @@ Tensor *tensor_conv2d(Tensor *input_t, Tensor *filter_t, int padding,
 	int output_width =
 	    ((input_t->width - filter_t->width) + 2 * padding) / stride + 1;
 
-	printf("output_height: %d\n", output_height);
-	printf("output_width: %d\n", output_width);
-
 	Tensor *output_t =
 	    tensor_create(input_t->n, filter_t->n, output_height, output_width);
+
+	int output_size = output_t->n * output_t->channels * output_t->height *
+			  output_t->width;
 
 	for (int b = 0; b < input_t->n; ++b) {
 		for (int o = 0; o < filter_t->n; ++o) {
@@ -71,7 +71,6 @@ Tensor *tensor_conv2d(Tensor *input_t, Tensor *filter_t, int padding,
 							     kx <
 							     filter_t->width;
 							     ++kx) {
-
 								int in_y =
 								    (y *
 								     stride) -
@@ -90,7 +89,7 @@ Tensor *tensor_conv2d(Tensor *input_t, Tensor *filter_t, int padding,
 								    in_x <
 									input_t
 									    ->width) {
-									long long input_idx = get_flat_index(
+									int input_idx = get_flat_index(
 									    b,
 									    ic,
 									    in_y,
@@ -106,7 +105,7 @@ Tensor *tensor_conv2d(Tensor *input_t, Tensor *filter_t, int padding,
 										->data
 										    [input_idx];
 
-									long long filter_idx = get_flat_index(
+									int filter_idx = get_flat_index(
 									    o,
 									    ic,
 									    ky,
@@ -130,7 +129,7 @@ Tensor *tensor_conv2d(Tensor *input_t, Tensor *filter_t, int padding,
 							}
 						}
 					}
-					long long out_idx = get_flat_index(
+					int out_idx = get_flat_index(
 					    b, o, y, x, output_t->channels,
 					    output_t->height, output_t->width);
 					output_t->data[out_idx] = sum;
@@ -138,6 +137,7 @@ Tensor *tensor_conv2d(Tensor *input_t, Tensor *filter_t, int padding,
 			}
 		}
 	}
+
 	return output_t;
 }
 
@@ -191,6 +191,16 @@ Tensor *tensor_relu(Tensor *t)
 		if (t->data[i] < 0.0f) {
 			t->data[i] = 0.0f;
 		}
+	}
+	return t;
+}
+
+Tensor *tensor_flatten(Image *img)
+{
+	Tensor *t = tensor_create(1, 1, 28, 28);
+
+	for (int i = 0; i < 28 * 28; ++i) {
+		t->data[i] = img->pixels[i] / 255.0f;
 	}
 	return t;
 }
@@ -276,10 +286,8 @@ Matrix *matrix_flatten(Image *img)
 {
 	Matrix *mat = matrix_create(1, 784);
 
-	for (int i = 0; i < 28; ++i) {
-		for (int j = 0; j < 28; ++j) {
-			mat->data[i * 28 + j] = img->pixels[i * 28 + j] / 255.0;
-		}
+	for (int i = 0; i < 28 * 28; ++i) {
+		mat->data[i] = img->pixels[i] / 255.0f;
 	}
 	return mat;
 }
@@ -491,6 +499,20 @@ void print_image_matrix(Matrix *mat)
 	for (int i = 0; i < 28; ++i) {
 		for (int j = 0; j < 28; ++j) {
 			if (mat->data[i * 28 + j] > 0) {
+				printf("#");
+			} else {
+				printf(".");
+			}
+		}
+		printf("\n");
+	}
+}
+
+void print_image_tensor_mnist(Tensor *t, int rows, int cols)
+{
+	for (int i = 0; i < rows; ++i) {
+		for (int j = 0; j < cols; ++j) {
+			if (t->data[i * cols + j] > 0) {
 				printf("#");
 			} else {
 				printf(".");

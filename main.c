@@ -227,54 +227,42 @@ int main()
 	fread(validation_labels, sizeof(uint8_t), validation_label_count,
 	      fp_test_labels);
 
-	Tensor *input_t = tensor_create(1, 1, 6, 6);
-	Tensor *filter_t = tensor_create(1, 1, 3, 3);
+	// input(28X28) -> conv2d(26X26) -> maxpool(13X13) -> filters(8)
+	// = 8 X 13 X 13
+	Matrix *W1 = matrix_create(1352, 128);
+	Matrix *W2 = matrix_create(128, 10);
 
-	for (int i = 0; i < input_t->height * input_t->width; ++i) {
-		input_t->data[i] = i;
-	}
-	printf("input tensor\n");
-	for (int k = 0; k < input_t->height; ++k) {
-		for (int l = 0; l < input_t->width; ++l) {
-			printf("%f ", input_t->data[k * input_t->width + l]);
+	Tensor *filter_t = tensor_create(8, 1, 3, 3);
+	tensor_randomize(filter_t);
+
+	for (int i = 0; i < EPOCH; ++i) {
+		for (int i = 0; i < 10; ++i) {
+			Image *img = &train_images[i];
+			Tensor *input_t = tensor_flatten(img);
+			Tensor *input_t_conv2d =
+			    tensor_conv2d(input_t, filter_t, 0, 1);
+			tensor_relu(input_t_conv2d);
+			Tensor *input_t_conv2d_maxpool =
+			    tensor_maxpool(input_t_conv2d, 2);
+			Matrix *flattened =
+			    tensor_flatten_to_matrix(input_t_conv2d_maxpool);
+
+			Matrix *hidden_raw = matrix_multiply(flattened, W1);
+			matrix_relu(hidden_raw);
+
+			Matrix *output = matrix_multiply(hidden_raw, W2);
+			matrix_softmax(output);
+
+			matrix_print(output);
+
+			tensor_free(input_t);
+			tensor_free(input_t_conv2d);
+			tensor_free(input_t_conv2d_maxpool);
+			matrix_free(flattened);
+			matrix_free(hidden_raw);
+			matrix_free(output);
 		}
-		printf("\n");
 	}
-
-	for (int j = 0; j < filter_t->height * filter_t->width; ++j) {
-		filter_t->data[j] = j;
-	}
-
-	printf("kernel tensor\n");
-	for (int k = 0; k < filter_t->height; ++k) {
-		for (int l = 0; l < filter_t->width; ++l) {
-			printf("%f ", filter_t->data[k * filter_t->width + l]);
-		}
-		printf("\n");
-	}
-
-	Tensor *conv2d = tensor_conv2d(input_t, filter_t, 0, 1);
-	Tensor *max_pool = tensor_maxpool(conv2d, 2);
-
-	printf("output conv2d\n");
-	for (int k = 0; k < conv2d->height; ++k) {
-		for (int l = 0; l < conv2d->width; ++l) {
-			printf("%f ", conv2d->data[k * conv2d->width + l]);
-		}
-		printf("\n");
-	}
-	printf("output max_pool\n");
-	for (int k = 0; k < max_pool->height; ++k) {
-		for (int l = 0; l < max_pool->width; ++l) {
-			printf("%f ", max_pool->data[k * max_pool->width + l]);
-		}
-		printf("\n");
-	}
-	tensor_free(input_t);
-	tensor_free(filter_t);
-	tensor_free(conv2d);
-	tensor_free(max_pool);
-
 	/*
 	Matrix *W1 = matrix_randomize(matrix_create(784, 128));
 	Matrix *W2 = matrix_randomize(matrix_create(128, 10));
