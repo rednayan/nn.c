@@ -227,7 +227,7 @@ int main()
 	fread(validation_labels, sizeof(uint8_t), validation_label_count,
 	      fp_test_labels);
 
-	Tensor *input_t = tensor_create(1, 1, 5, 5);
+	Tensor *input_t = tensor_create(1, 1, 6, 6);
 	Tensor *filter_t = tensor_create(1, 1, 3, 3);
 
 	for (int i = 0; i < input_t->height * input_t->width; ++i) {
@@ -254,17 +254,26 @@ int main()
 	}
 
 	Tensor *conv2d = tensor_conv2d(input_t, filter_t, 0, 1);
+	Tensor *max_pool = tensor_maxpool(conv2d, 2);
 
-	printf("output\n");
+	printf("output conv2d\n");
 	for (int k = 0; k < conv2d->height; ++k) {
 		for (int l = 0; l < conv2d->width; ++l) {
 			printf("%f ", conv2d->data[k * conv2d->width + l]);
 		}
 		printf("\n");
 	}
+	printf("output max_pool\n");
+	for (int k = 0; k < max_pool->height; ++k) {
+		for (int l = 0; l < max_pool->width; ++l) {
+			printf("%f ", max_pool->data[k * max_pool->width + l]);
+		}
+		printf("\n");
+	}
 	tensor_free(input_t);
 	tensor_free(filter_t);
 	tensor_free(conv2d);
+	tensor_free(max_pool);
 
 	/*
 	Matrix *W1 = matrix_randomize(matrix_create(784, 128));

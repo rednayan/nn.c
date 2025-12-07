@@ -31,10 +31,13 @@ typedef struct {
 
 Tensor *tensor_create(int n, int channels, int height, int width);
 Tensor *tensor_conv2d(Tensor *t, Tensor *filter_t, int padding, int stride);
+Tensor *tensor_maxpool(Tensor *t, int stride);
 Tensor *tensor_randomize(Tensor *t);
+Tensor *tensor_relu(Tensor *t);
 void tensor_free(Tensor *t);
 long long get_flat_index(int n, int c, int h, int w, int channels, int height,
 			 int width);
+Matrix *tensor_flatten_to_matrix(Tensor *t);
 
 Matrix *matrix_create(int rows, int cols);
 Matrix_uint8 *matrix_create_uint8(int rows, int cols);

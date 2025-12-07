@@ -1,4 +1,6 @@
 #include "nn.h"
+#include <inttypes.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -139,6 +141,71 @@ Tensor *tensor_conv2d(Tensor *input_t, Tensor *filter_t, int padding,
 	return output_t;
 }
 
+Tensor *tensor_maxpool(Tensor *t, int stride)
+{
+	int out_h = t->height / stride;
+	int out_w = t->width / stride;
+	Tensor *output_t = tensor_create(t->n, t->channels, out_h, out_w);
+
+	for (int b = 0; b < t->n; ++b) {
+		for (int c = 0; c < t->channels; ++c) {
+			for (int i = 0; i < out_h; ++i) {
+				for (int j = 0; j < out_w; ++j) {
+					float max_val = -INFINITY;
+					for (int ki = 0; ki < stride; ++ki) {
+						for (int kj = 0; kj < stride;
+						     ++kj) {
+							int row =
+							    i * stride + kj;
+							int col =
+							    j * stride + kj;
+							long long idx =
+							    get_flat_index(
+								b, c, row, col,
+								t->channels,
+								t->height,
+								t->width);
+							if (t->data[idx] >
+							    max_val) {
+								max_val =
+								    t->data
+									[idx];
+							}
+						}
+					}
+					long long out_idx = get_flat_index(
+					    b, c, i, j, output_t->channels,
+					    output_t->height, output_t->width);
+					output_t->data[out_idx] = max_val;
+				}
+			}
+		}
+	}
+	return output_t;
+}
+
+Tensor *tensor_relu(Tensor *t)
+{
+	int tensor_size = t->channels * t->n * t->height * t->width;
+	for (int i = 0; i < tensor_size; ++i) {
+		if (t->data[i] < 0.0f) {
+			t->data[i] = 0.0f;
+		}
+	}
+	return t;
+}
+
+Matrix *tensor_flatten_to_matrix(Tensor *t)
+{
+	int features = t->channels * t->height * t->width;
+	Matrix *m = matrix_create(t->n, features);
+	int total_elements = t->n * features;
+	for (int i = 0; i < total_elements; ++i) {
+		m->data[i] = t->data[i];
+	}
+	return m;
+}
+
 Matrix *matrix_create(int rows, int cols)
 {
 	Matrix *mat = (Matrix *)malloc(sizeof(Matrix));
@@ -264,8 +331,8 @@ Matrix *matrix_relu(Matrix *mat)
 {
 	for (int i = 0; i < mat->rows; ++i) {
 		for (int j = 0; j < mat->cols; ++j) {
-			if (mat->data[i * mat->cols + j] < 0) {
-				mat->data[i * mat->cols + j] = 0;
+			if (mat->data[i * mat->cols + j] < 0.0f) {
+				mat->data[i * mat->cols + j] = 0.0f;
 			}
 		}
 	}
